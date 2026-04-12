@@ -107,7 +107,37 @@
         .treino-card.pull { border-top-color: var(--accent-tertiary); }
         .treino-card.legs { border-top-color: var(--accent-secondary); }
 
-        .treino-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 15px; margin-bottom: 16px; }
+        .treino-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 15px; margin-bottom: 16px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .treino-header:hover { opacity: 0.88; }
+
+        /* ── Collapse button ── */
+        .btn-collapse {
+            background: rgba(255,255,255,.06); border: 1px solid #444;
+            color: var(--text-muted); width: 34px; height: 34px; border-radius: 8px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem; flex-shrink: 0; pointer-events: none; /* header handles the click */
+            transition: transform 0.32s cubic-bezier(.4,0,.2,1);
+        }
+        .treino-card.collapsed .btn-collapse { transform: rotate(-90deg); }
+
+        /* ── Card body collapse animation ── */
+        .treino-card > .card-actions,
+        .treino-card > ul {
+            overflow: hidden;
+            transition: max-height 0.38s cubic-bezier(.4,0,.2,1),
+                        opacity 0.28s ease,
+                        margin-bottom 0.28s ease;
+            max-height: 6000px;
+            opacity: 1;
+        }
+        .treino-card.collapsed > .card-actions,
+        .treino-card.collapsed > ul {
+            max-height: 0 !important;
+            opacity: 0;
+            margin-bottom: 0;
+        }
+        .treino-card.collapsed { padding-bottom: 0; }
+        .treino-card.collapsed .treino-header { border-bottom-color: transparent; margin-bottom: 0; padding-bottom: 14px; }
         h2 { margin: 0; font-size: 1.6rem; }
         .foco { color: var(--text-muted); font-size: 0.9rem; margin-top: 4px; }
 
@@ -525,12 +555,15 @@
 
     <!-- TREINO A -->
     <div class="treino-card" id="card-A">
-        <div class="treino-header">
+        <div class="treino-header" onclick="toggleCard('A')">
             <div>
                 <h2>Treino A: Empurrar</h2>
                 <div class="foco">Peito, Ombro, Tríceps e Abdômen Infra</div>
             </div>
-            <div class="badge" style="color:var(--accent-primary)">Seg &amp; Qui</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                <div class="badge" style="color:var(--accent-primary)">Seg &amp; Qui</div>
+                <button class="btn-collapse" id="collapse-A">▾</button>
+            </div>
         </div>
         <div class="card-actions">
             <button class="btn-iniciar" id="btn-A" onclick="startTraining('A')">▶ Iniciar Treino A</button>
@@ -574,12 +607,15 @@
 
     <!-- TREINO B -->
     <div class="treino-card pull" id="card-B">
-        <div class="treino-header">
+        <div class="treino-header" onclick="toggleCard('B')">
             <div>
                 <h2>Treino B: Puxar</h2>
                 <div class="foco">Costas, Posterior de Ombro e Bíceps</div>
             </div>
-            <div class="badge" style="color:var(--accent-tertiary)">Ter &amp; Sex</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                <div class="badge" style="color:var(--accent-tertiary)">Ter &amp; Sex</div>
+                <button class="btn-collapse" id="collapse-B">▾</button>
+            </div>
         </div>
         <div class="card-actions">
             <button class="btn-iniciar" id="btn-B" onclick="startTraining('B')">▶ Iniciar Treino B</button>
@@ -619,12 +655,15 @@
 
     <!-- TREINO C -->
     <div class="treino-card legs" id="card-C">
-        <div class="treino-header">
+        <div class="treino-header" onclick="toggleCard('C')">
             <div>
                 <h2>Treino C: Pernas</h2>
                 <div class="foco">Quadríceps, Posterior, Panturrilha e Abdômen Supra</div>
             </div>
-            <div class="badge" style="color:var(--accent-secondary)">Qua &amp; Sáb</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                <div class="badge" style="color:var(--accent-secondary)">Qua &amp; Sáb</div>
+                <button class="btn-collapse" id="collapse-C">▾</button>
+            </div>
         </div>
         <div class="card-actions">
             <button class="btn-iniciar" id="btn-C" onclick="startTraining('C')">▶ Iniciar Treino C</button>
@@ -1356,6 +1395,30 @@ function showToast(title, body, cls = '') {
 }
 
 // ──────────────────────────────────────────
+// CARD COLLAPSE
+// ──────────────────────────────────────────
+function toggleCard(type) {
+    // Don't collapse if training is active on this card
+    if (activeTrain === type) return;
+    const card = document.getElementById(`card-${type}`);
+    const isCollapsed = card.classList.toggle('collapsed');
+    saveCollapseState(type, isCollapsed);
+}
+
+function saveCollapseState(type, collapsed) {
+    const state = JSON.parse(localStorage.getItem('bb_collapse') || '{}');
+    state[type] = collapsed;
+    localStorage.setItem('bb_collapse', JSON.stringify(state));
+}
+
+function loadCollapseState() {
+    const state = JSON.parse(localStorage.getItem('bb_collapse') || '{}');
+    ['A', 'B', 'C'].forEach(type => {
+        if (state[type]) document.getElementById(`card-${type}`).classList.add('collapsed');
+    });
+}
+
+// ──────────────────────────────────────────
 // PROGRESS CHART
 // ──────────────────────────────────────────
 function renderProgressChart(exId, sessions) {
@@ -1481,6 +1544,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initData();
     renderDashboard();
     renderPhase2Content('A');
+    loadCollapseState();
     renderPlateauWarnings();
     // Register service worker (PWA offline)
     if ('serviceWorker' in navigator) {
