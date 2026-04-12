@@ -1,0 +1,21 @@
+{
+  "name": "Personal Bodybuilding",
+  "short_name": "Treino",
+  "description": "Personal trainer ABC 2x — hipertrofia e densidade muscular",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#121212",
+  "orientation": "portrait-primary",
+  "lang": "pt-BR",
+  "categories": ["health", "fitness"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

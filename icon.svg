@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background rounded -->
+  <rect width="512" height="512" rx="112" fill="#121212"/>
+  <!-- Barbell bar -->
+  <rect x="80" y="240" width="352" height="32" rx="10" fill="#2a2a2a"/>
+  <!-- Left outer plate -->
+  <rect x="50" y="166" width="54" height="180" rx="14" fill="#ff4757"/>
+  <!-- Left inner plate -->
+  <rect x="108" y="190" width="36" height="132" rx="9" fill="#cc3545"/>
+  <!-- Right inner plate -->
+  <rect x="368" y="190" width="36" height="132" rx="9" fill="#cc3545"/>
+  <!-- Right outer plate -->
+  <rect x="408" y="166" width="54" height="180" rx="14" fill="#ff4757"/>
+  <!-- Center grip highlight -->
+  <rect x="222" y="226" width="68" height="60" rx="8" fill="#2ed573" opacity="0.18"/>
+  <rect x="238" y="234" width="36" height="44" rx="5" fill="#2ed573" opacity="0.5"/>
+</svg>

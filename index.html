@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Personal Bodybuilding</title>
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#121212">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Treino">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --bg-color: #121212;
@@ -308,6 +317,23 @@
         @keyframes toast-in { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
         @keyframes toast-out { from { opacity: 1; } to { opacity: 0; transform: translateX(30px); } }
 
+        /* ── Session elapsed timer ── */
+        .bar-time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent-secondary); font-size: 0.9rem; font-family: 'Courier New', monospace; letter-spacing: 0.5px; }
+        .bar-time.overtime { color: var(--accent-primary); animation: blink 1s step-start infinite; }
+        @keyframes blink { 50% { opacity: .4; } }
+
+        /* ── Plateau warnings ── */
+        .plateau-section { background: rgba(255,165,2,.06); border: 1px solid rgba(255,165,2,.22); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
+        .plateau-section h4 { margin: 0 0 10px; color: var(--accent-warning); font-size: 0.88rem; display: flex; align-items: center; gap: 6px; }
+        .plateau-item { font-size: 0.82rem; color: var(--text-muted); padding: 5px 0; border-bottom: 1px solid rgba(255,165,2,.1); display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px; }
+        .plateau-item:last-of-type { border-bottom: none; }
+        .plateau-item strong { color: #fff; }
+        .plateau-tag { font-size: 0.72rem; background: rgba(255,165,2,.12); color: var(--accent-warning); padding: 1px 7px; border-radius: 8px; white-space: nowrap; }
+        .plateau-tip { font-size: 0.75rem; color: var(--text-muted); margin-top: 10px; font-style: italic; border-top: 1px solid rgba(255,165,2,.1); padding-top: 8px; }
+
+        /* ── Progress chart in modal ── */
+        .chart-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px; }
+
         /* ════════════════════════════
            RESPONSIVO — MOBILE FIRST
            ════════════════════════════ */
@@ -493,6 +519,9 @@
             <span class="legenda-item">⏱ <strong style="color:#fff;">45s</strong> abdômen</span>
         </span>
     </div>
+
+    <!-- Plateau warnings (shown by JS when detected) -->
+    <div id="plateau-warnings" class="plateau-section" style="display:none"></div>
 
     <!-- TREINO A -->
     <div class="treino-card" id="card-A">
@@ -721,6 +750,7 @@
     <div class="session-bar" id="session-bar">
         <div class="session-bar-info">
             <strong id="bar-train-name">—</strong>
+            <span class="bar-time" id="bar-time">0:00</span>
             <span class="session-sets-count" id="bar-sets">0 séries</span>
             <span id="bar-prs"></span>
         </div>
@@ -735,6 +765,10 @@
                 <button class="modal-close" onclick="closeHistory()">✕</button>
             </div>
             <div id="modal-body"></div>
+            <div id="chart-container" style="display:none">
+                <p class="chart-label">Progressão do 1RM estimado</p>
+                <canvas id="progress-chart"></canvas>
+            </div>
         </div>
     </div>
 
@@ -907,6 +941,8 @@ let activeTrain = null;
 let sessionData = {};  // { exId: [ {weight, reps, done}, ... ] }
 let sessionNewPRs = 0;
 let sessionDoneSets = 0;
+let sessionStartTime = null;
+let sessionClockInterval = null;
 
 function startTraining(type) {
     if (activeTrain === type) { endTraining(); return; }
@@ -934,6 +970,20 @@ function startTraining(type) {
     document.getElementById('session-bar').classList.add('visible');
     document.getElementById('bar-train-name').textContent = `Treino ${type} em andamento`;
     updateSessionBar();
+
+    // Start elapsed clock
+    sessionStartTime = Date.now();
+    if (sessionClockInterval) clearInterval(sessionClockInterval);
+    sessionClockInterval = setInterval(() => {
+        const secs = Math.floor((Date.now() - sessionStartTime) / 1000);
+        const m = Math.floor(secs / 60);
+        const s = secs % 60;
+        const el = document.getElementById('bar-time');
+        if (el) {
+            el.textContent = `${m}:${String(s).padStart(2, '0')}`;
+            el.className   = 'bar-time' + (secs > 70 * 60 ? ' overtime' : '');
+        }
+    }, 1000);
 
     card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -970,7 +1020,12 @@ function endTraining() {
 
     activeTrain = null;
     sessionData = {};
+    if (sessionClockInterval) { clearInterval(sessionClockInterval); sessionClockInterval = null; }
+    sessionStartTime = null;
+    const barTime = document.getElementById('bar-time');
+    if (barTime) { barTime.textContent = '0:00'; barTime.className = 'bar-time'; }
     renderDashboard();
+    setTimeout(renderPlateauWarnings, 400);
 }
 
 function injectSetRows(li, exId, sets, rest) {
@@ -1204,12 +1259,23 @@ function showHistory(exId) {
     }
 
     document.getElementById('modal-body').innerHTML = html;
+
+    // Render progress chart if enough data
+    const chartContainer = document.getElementById('chart-container');
+    if (sessions.length >= 2) {
+        chartContainer.style.display = 'block';
+        renderProgressChart(exId, sessions);
+    } else {
+        chartContainer.style.display = 'none';
+    }
+
     document.getElementById('history-modal').classList.add('visible');
 }
 
 function closeHistory(event) {
     if (!event || event.target === document.getElementById('history-modal')) {
         document.getElementById('history-modal').classList.remove('visible');
+        if (window.progressChart) { window.progressChart.destroy(); window.progressChart = null; }
     }
 }
 
@@ -1290,6 +1356,118 @@ function showToast(title, body, cls = '') {
 }
 
 // ──────────────────────────────────────────
+// PROGRESS CHART
+// ──────────────────────────────────────────
+function renderProgressChart(exId, sessions) {
+    const recent = sessions.slice(-12);
+    const labels = recent.map(s => {
+        const [, m, day] = s.date.split('-');
+        return `${day}/${m}`;
+    });
+    const data = recent.map(s => {
+        const done = (s.exercises[exId] || []).filter(x => x.done && x.weight && x.reps);
+        if (!done.length) return null;
+        return Math.round(Math.max(...done.map(x => x.weight * (1 + x.reps / 30))) * 10) / 10;
+    });
+
+    if (window.progressChart) window.progressChart.destroy();
+    window.progressChart = new Chart(document.getElementById('progress-chart'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                data,
+                borderColor: '#2ed573',
+                backgroundColor: 'rgba(46,213,115,0.08)',
+                pointBackgroundColor: data.map((v, i) =>
+                    i === data.length - 1 ? '#ffa502' : '#2ed573'),
+                pointRadius: 5,
+                pointHoverRadius: 7,
+                tension: 0.35,
+                spanGaps: true,
+                fill: true,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1e1e1e', borderColor: '#2ed573', borderWidth: 1,
+                    titleColor: '#a4b0be', bodyColor: '#fff',
+                    callbacks: { label: ctx => ` ${ctx.raw}kg` }
+                }
+            },
+            scales: {
+                x: { ticks: { color: '#a4b0be', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: {
+                    ticks: { color: '#a4b0be', font: { size: 11 }, callback: v => `${v}kg` },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                }
+            }
+        }
+    });
+}
+
+// ──────────────────────────────────────────
+// PLATEAU DETECTION
+// ──────────────────────────────────────────
+function detectPlateaus() {
+    const d = getData();
+    const results = [];
+    const exIds = new Set();
+    (d.sessions || []).forEach(s => { if (s.exercises) Object.keys(s.exercises).forEach(id => exIds.add(id)); });
+
+    exIds.forEach(exId => {
+        const history = (d.sessions || [])
+            .filter(s => s.exercises && s.exercises[exId] && s.exercises[exId].some(x => x.done))
+            .slice(-4);
+        if (history.length < 3) return;
+
+        const oneRMs = history.map(s => {
+            const done = s.exercises[exId].filter(x => x.done && x.weight && x.reps);
+            return done.length ? Math.max(...done.map(x => x.weight * (1 + x.reps / 30))) : 0;
+        }).filter(v => v > 0);
+
+        if (oneRMs.length < 3) return;
+
+        const improvement = ((oneRMs[oneRMs.length - 1] - oneRMs[0]) / oneRMs[0]) * 100;
+        if (improvement < 2.5) {
+            const first = new Date(history[0].date);
+            const last  = new Date(history[history.length - 1].date);
+            const days  = Math.round((last - first) / 86400000);
+            results.push({
+                exId,
+                name:    EX_NAMES[exId] || exId,
+                count:   history.length,
+                days,
+                oneRM:   Math.round(oneRMs[oneRMs.length - 1] * 10) / 10
+            });
+        }
+    });
+    return results;
+}
+
+function renderPlateauWarnings() {
+    const warnings = detectPlateaus();
+    const el = document.getElementById('plateau-warnings');
+    if (!el) return;
+    if (!warnings.length) { el.style.display = 'none'; return; }
+
+    el.style.display = 'block';
+    el.innerHTML = `
+        <h4>⚠️ Possíveis plateaus detectados (${warnings.length})</h4>
+        ${warnings.map(w => `
+            <div class="plateau-item">
+                <strong>${w.name}</strong>
+                <span class="plateau-tag">${w.count} sessões · ${w.days > 0 ? w.days + ' dias' : 'recente'} · 1RM ~${w.oneRM}kg</span>
+            </div>`).join('')}
+        <p class="plateau-tip">
+            Estratégias: adicione +1 rep, mude a ordem do exercício, ou ative a Fase 2 para esse movimento.
+        </p>`;
+}
+
+// ──────────────────────────────────────────
 // ENTER KEY on calculator
 // ──────────────────────────────────────────
 ['calc-weight', 'calc-reps'].forEach(id => {
@@ -1303,6 +1481,11 @@ document.addEventListener('DOMContentLoaded', () => {
     initData();
     renderDashboard();
     renderPhase2Content('A');
+    renderPlateauWarnings();
+    // Register service worker (PWA offline)
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
 });
 </script>
 </body>
