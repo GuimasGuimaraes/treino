@@ -431,6 +431,11 @@
         .set-entry-cancel:hover { color: #fff; border-color: #666 !important; }
         .set-entry-save { background: rgba(46,213,115,.15); color: var(--accent-secondary); border-color: var(--accent-secondary) !important; }
         .set-entry-save:hover { background: var(--accent-secondary); color: #000; }
+        .set-entry-clear {
+            background: rgba(255,71,87,.1); color: var(--accent-primary); border-color: rgba(255,71,87,.45) !important;
+            min-height: 42px; border-radius: 9px; cursor: pointer; width: 100%; margin-top: 10px; font-weight: 700;
+        }
+        .set-entry-clear:hover { background: rgba(255,71,87,.2); }
 
         /* ── Toast ── */
         .toast-container { position: fixed; top: calc(20px + env(safe-area-inset-top)); right: 20px; z-index: 500; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
@@ -1570,7 +1575,9 @@ function completeSet(exId, idx, rest) {
 }
 
 function openSetEntryModal(exId, idx, rest, weight, reps) {
-    pendingSetEntry = { exId, idx, rest };
+    const row = document.getElementById(`row-${exId}-${idx}`);
+    const wasDone = !!(row && row.classList.contains('done'));
+    pendingSetEntry = { exId, idx, rest, wasDone };
     const name = EX_NAMES[exId] || exId;
     document.getElementById('set-entry-title').textContent = `Registrar série — ${name} #${idx + 1}`;
     document.getElementById('set-entry-body').innerHTML = `
@@ -1597,8 +1604,9 @@ function openSetEntryModal(exId, idx, rest, weight, reps) {
         </div>
         <div class="set-entry-actions">
             <button class="set-entry-cancel" onclick="closeSetEntryModal()">Cancelar</button>
-            <button class="set-entry-save" onclick="submitSetEntryModal()">Salvar série</button>
+            <button class="set-entry-save" onclick="submitSetEntryModal()">${wasDone ? 'Salvar alteração' : 'Salvar série'}</button>
         </div>
+        ${wasDone ? '<button class="set-entry-clear" onclick="clearSetEntryModal()">Limpar esta série</button>' : ''}
     `;
     document.getElementById('set-entry-modal').classList.add('visible');
     const repsInput = document.getElementById('set-entry-reps');
@@ -1619,9 +1627,37 @@ function setSetEntryReps(value) {
     repsInput.setSelectionRange(String(value).length, String(value).length);
 }
 
+function clearSetEntryModal() {
+    if (!pendingSetEntry) return;
+    const { exId, idx } = pendingSetEntry;
+    const row = document.getElementById(`row-${exId}-${idx}`);
+    const wInput = document.getElementById(`w-${exId}-${idx}`);
+
+    if (!row || !row.classList.contains('done')) {
+        closeSetEntryModal();
+        return;
+    }
+
+    if (!sessionData[exId]) sessionData[exId] = [];
+    sessionData[exId][idx] = { weight: null, reps: null, done: false };
+
+    row.classList.remove('done', 'new-pr');
+    row.querySelector('.set-check').textContent = '○';
+    wInput.value = '';
+
+    sessionDoneSets = Math.max(0, sessionDoneSets - 1);
+    updateSessionBar();
+
+    const liveEl = document.getElementById(`pr-live-${exId}`);
+    if (liveEl) liveEl.textContent = '';
+
+    closeSetEntryModal();
+    showToast('Série limpa', 'Você pode registrar novamente quando concluir.', 'end-toast');
+}
+
 function submitSetEntryModal() {
     if (!pendingSetEntry) return;
-    const { exId, idx, rest } = pendingSetEntry;
+    const { exId, idx, rest, wasDone } = pendingSetEntry;
     const wInput = document.getElementById(`w-${exId}-${idx}`);
     const row = document.getElementById(`row-${exId}-${idx}`);
     const weightInput = document.getElementById('set-entry-weight');
@@ -1656,7 +1692,7 @@ function submitSetEntryModal() {
     const isPR = checkAndSavePR(exId, weight, reps);
     if (isPR) row.classList.add('new-pr');
 
-    sessionDoneSets++;
+    if (!wasDone) sessionDoneSets++;
     updateSessionBar();
 
     // Haptic feedback (Android/mobile)
