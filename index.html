@@ -66,6 +66,23 @@
         }
         .subtitle { text-align: center; color: var(--text-muted); margin-bottom: 30px; font-weight: 300; font-size: 1.1rem; }
 
+        /* ── Extras panel (non-essential while training) ── */
+        .extras-section { background: #171717; border: 1px solid #2a2a2a; border-radius: 12px; margin-bottom: 20px; padding: 16px 16px 8px; }
+        .extras-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .extras-head h3 { margin: 0; font-size: 1rem; color: #fff; }
+        .extras-head p { margin: 4px 0 0; font-size: 0.82rem; color: var(--text-muted); }
+        .extras-body {
+            overflow: hidden;
+            transition: max-height 0.38s cubic-bezier(.4,0,.2,1), opacity 0.28s ease, margin-bottom 0.28s ease;
+            max-height: 16000px;
+            opacity: 1;
+            margin-bottom: 8px;
+        }
+        .extras-section.collapsed .extras-body { max-height: 0 !important; opacity: 0; margin-bottom: 0; }
+        .extras-section.collapsed .btn-collapse { transform: rotate(-90deg); }
+        .extras-section.collapsed { padding-bottom: 0; }
+        .extras-section.collapsed .extras-head { margin-bottom: 0; }
+
         /* ── Dashboard ── */
         .dashboard {
             display: grid;
@@ -183,7 +200,14 @@
         .rest-badge:hover { background: rgba(255,255,255,.14); color: #fff; }
 
         .dica-execucao { background: var(--dica-bg); padding: 10px 15px; border-radius: 6px; font-size: 0.87rem; color: #dfe4ea; display: flex; align-items: flex-start; gap: 10px; margin-top: 8px; }
+        .dica-execucao.collapsed-tip { display: none; }
         .dica-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+        .btn-tip-toggle {
+            background: none; border: 1px solid #444; color: var(--text-muted);
+            padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; cursor: pointer;
+            transition: all .15s;
+        }
+        .btn-tip-toggle:hover { border-color: var(--accent-warning); color: var(--accent-warning); background: rgba(255,165,2,.08); }
 
         /* ── Set tracking (injected) ── */
         .log-section { margin-top: 12px; display: none; }
@@ -393,6 +417,15 @@
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
         .modal-header h4 { margin: 0; font-size: 1.1rem; }
         .modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.3rem; cursor: pointer; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 14px; }
+        .modal-actions button {
+            flex: 1; min-height: 44px; border-radius: 10px; font-weight: 700; cursor: pointer;
+            border: 1px solid transparent; transition: all .15s;
+        }
+        .btn-modal-cancel { background: transparent; color: var(--text-muted); border-color: #444; }
+        .btn-modal-cancel:hover { color: #fff; border-color: #666; }
+        .btn-modal-confirm { background: rgba(255,71,87,.12); color: var(--accent-primary); border-color: rgba(255,71,87,.5); }
+        .btn-modal-confirm:hover { background: var(--accent-primary); color: #000; border-color: var(--accent-primary); }
         .history-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
         .history-table th { text-align: left; color: var(--text-muted); font-size: 0.72rem; text-transform: uppercase; padding: 5px 8px; border-bottom: 1px solid #333; }
         .history-table td { padding: 8px 8px; border-bottom: 1px solid #222; }
@@ -554,6 +587,7 @@
             .exercicio-meta { gap: 6px; }
             .rest-badge { font-size: 0.68rem; padding: 4px 9px; min-height: 30px; display: inline-flex; align-items: center; }
             .dica-execucao { font-size: 0.82rem; padding: 8px 10px; gap: 8px; }
+            .btn-tip-toggle { min-height: 30px; font-size: 0.7rem; }
 
             /* ── Set tracking: o mais crítico no treino ── */
             .log-section { margin-top: 12px; }
@@ -615,6 +649,16 @@
     </style>
 </head>
 <body>
+
+    <div class="extras-section" id="extras-section">
+        <div class="extras-head" onclick="toggleExtras()">
+            <div>
+                <h3>Painel e Ferramentas</h3>
+                <p>Conteúdos úteis fora da execução direta. Toque para expandir quando precisar.</p>
+            </div>
+            <button class="btn-collapse" id="collapse-extras">▾</button>
+        </div>
+        <div class="extras-body" id="extras-body">
 
     <!-- Dashboard -->
     <div class="dashboard">
@@ -726,6 +770,9 @@
         </div>
     </div>
 
+        </div>
+    </div>
+
     <!-- TREINO A -->
     <div class="treino-card" id="card-A">
         <div class="treino-header" onclick="toggleCard('A')">
@@ -822,6 +869,10 @@
             <li data-exid="rosca-martelo" data-sets="3" data-rest="60">
                 <div class="exercicio-header"><span class="exercicio">7. Rosca Martelo</span><div class="exercicio-meta"><span class="series">3 × 12 reps</span><span class="rest-badge" onclick="startTimer(60)">⏱ 60s</span></div></div>
                 <div class="dica-execucao"><span class="dica-icon">🎯</span><span><strong>Execução:</strong> Pegada neutra (polegar para cima) durante todo o movimento. Cotovelos fixos ao lado do corpo. Recruta principalmente o braquial — que fica sob o bíceps e "empurra" ele para cima, dando volume. Pode alternar os braços para maior foco.</span></div>
+            </li>
+            <li data-exid="rosca-scott" data-sets="3" data-rest="60">
+                <div class="exercicio-header"><span class="exercicio">8. Rosca Scott (Máquina ou Banco)</span><div class="exercicio-meta"><span class="series">3 × 10–12 reps</span><span class="rest-badge" onclick="startTimer(60)">⏱ 60s</span></div></div>
+                <div class="dica-execucao"><span class="dica-icon">🎯</span><span><strong>Execução:</strong> Apoie totalmente o braço no banco para eliminar embalo. Suba sem tirar o cotovelo da almofada e desça em 3 segundos, mantendo tensão até perto da extensão completa. Foque em controle e pico de contração no topo.</span></div>
             </li>
         </ul>
     </div>
@@ -966,7 +1017,7 @@
             <span class="session-sets-count" id="bar-sets">0 séries</span>
             <span id="bar-prs"></span>
         </div>
-        <button class="btn-encerrar" onclick="endTraining()">✓ Encerrar</button>
+        <button class="btn-encerrar" onclick="requestEndTraining()">✓ Encerrar</button>
     </div>
 
     <!-- History Modal -->
@@ -995,6 +1046,23 @@
         </div>
     </div>
 
+    <!-- End Training Confirmation Modal -->
+    <div class="modal-overlay" id="confirm-end-modal" onclick="closeEndTrainingConfirm(event)">
+        <div class="modal-box" style="max-width:460px;">
+            <div class="modal-header">
+                <h4>Confirmar encerramento</h4>
+                <button class="modal-close" onclick="closeEndTrainingConfirm()">✕</button>
+            </div>
+            <div id="confirm-end-message" style="color:var(--text-muted);font-size:.92rem;line-height:1.5;">
+                Deseja encerrar esta sessão agora?
+            </div>
+            <div class="modal-actions">
+                <button class="btn-modal-cancel" onclick="closeEndTrainingConfirm()">Continuar treino</button>
+                <button class="btn-modal-confirm" onclick="confirmEndTraining()">Sim, encerrar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast container -->
     <div class="toast-container" id="toast-container"></div>
 
@@ -1013,7 +1081,7 @@ const EX_NAMES = {
     'puxada-aberta': 'Puxada Aberta', 'remada-curvada': 'Remada Curvada',
     'remada-baixa': 'Remada Baixa', 'pull-down-corda': 'Pull-Down Corda',
     'crucifixo-inverso': 'Crucifixo Inverso', 'rosca-direta': 'Rosca Direta',
-    'rosca-martelo': 'Rosca Martelo', 'agachamento-livre': 'Agachamento Livre',
+    'rosca-martelo': 'Rosca Martelo', 'rosca-scott': 'Rosca Scott', 'agachamento-livre': 'Agachamento Livre',
     'leg-press': 'Leg Press 45°', 'cadeira-extensora': 'Cadeira Extensora',
     'stiff': 'Stiff', 'mesa-flexora': 'Mesa Flexora',
     'panturrilha-pe': 'Panturrilha em Pé', 'panturrilha-sentado': 'Panturrilha Sentado',
@@ -1037,7 +1105,7 @@ const PHASE2_DATA = {
         { old: 'Remada Baixa (Triângulo)',       newEx: 'Remada Serrote (Haltere)',      reason: 'Mais amplitude e controle unilateral' },
         { old: 'Pull-Down (Corda)',              newEx: 'Pullover (Haltere)',            reason: 'Ativa serrátil anterior e dorsal com amplitude completa' },
         { old: 'Crucifixo Inverso',              newEx: 'Face Pull (Corda)',             reason: 'Saúde do manguito rotador + posterior do ombro' },
-        { old: 'Rosca Direta (Barra W)',         newEx: 'Rosca Scott (Barra W)',         reason: 'Elimina completamente a compensação do tronco' },
+        { old: 'Rosca Direta (Barra W)',         newEx: 'Rosca Concentrada (Haltere)',   reason: 'Aumenta conexão mente-músculo e pico de contração' },
         { old: 'Rosca Martelo',                 newEx: 'Rosca 21',                      reason: 'Tempo sob tensão muito maior — quebra adaptação' },
     ],
     C: [
@@ -1266,6 +1334,7 @@ const EX_ID_TO_MUSCLE = {
     'crucifixo-inverso': 'ombro-posterior',
     'rosca-direta': 'biceps',
     'rosca-martelo': 'biceps-braquial',
+    'rosca-scott': 'biceps',
     'agachamento-livre': 'legs-composto',
     'leg-press': 'legs-press',
     'cadeira-extensora': 'quadriceps',
@@ -1416,10 +1485,11 @@ let sessionDoneSets = 0;
 let sessionStartTime = null;
 let sessionClockInterval = null;
 let pendingSetEntry = null;
+let pendingEndContext = null;
 
 function startTraining(type) {
-    if (activeTrain === type) { endTraining(); return; }
-    if (activeTrain) endTraining();
+    if (activeTrain === type) { requestEndTraining(); return; }
+    if (activeTrain) { requestEndTraining(type); return; }
 
     activeTrain = type;
     sessionData = {};
@@ -1459,6 +1529,34 @@ function startTraining(type) {
     }, 1000);
 
     card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function requestEndTraining(nextTrainType = null) {
+    if (!activeTrain) return;
+    pendingEndContext = { nextTrainType };
+
+    const messageEl = document.getElementById('confirm-end-message');
+    if (messageEl) {
+        messageEl.textContent = nextTrainType
+            ? `O Treino ${activeTrain} vai ser encerrado para iniciar o Treino ${nextTrainType}. Deseja continuar?`
+            : `Você está com o Treino ${activeTrain} em andamento. Deseja realmente encerrar a sessão agora?`;
+    }
+
+    document.getElementById('confirm-end-modal').classList.add('visible');
+}
+
+function closeEndTrainingConfirm(event) {
+    if (event && event.target !== document.getElementById('confirm-end-modal')) return;
+    document.getElementById('confirm-end-modal').classList.remove('visible');
+    pendingEndContext = null;
+}
+
+function confirmEndTraining() {
+    const nextTrainType = pendingEndContext && pendingEndContext.nextTrainType;
+    document.getElementById('confirm-end-modal').classList.remove('visible');
+    pendingEndContext = null;
+    endTraining();
+    if (nextTrainType) startTraining(nextTrainType);
 }
 
 function endTraining() {
@@ -2077,6 +2175,9 @@ function loadCollapseState() {
         if (state[type]) document.getElementById(`card-${type}`).classList.add('collapsed');
     });
     if (state.EV) document.getElementById('evolution-section').classList.add('collapsed');
+
+    const extras = document.getElementById('extras-section');
+    if (extras && (state.EX === undefined || state.EX)) extras.classList.add('collapsed');
 }
 
 function toggleEvolution() {
@@ -2084,6 +2185,47 @@ function toggleEvolution() {
     const isCollapsed = section.classList.toggle('collapsed');
     saveCollapseState('EV', isCollapsed);
     if (!isCollapsed) setTimeout(renderEvolutionDashboard, 100);
+}
+
+function toggleExtras() {
+    const section = document.getElementById('extras-section');
+    const isCollapsed = section.classList.toggle('collapsed');
+    saveCollapseState('EX', isCollapsed);
+    if (!isCollapsed && !document.getElementById('evolution-section')?.classList.contains('collapsed')) {
+        setTimeout(renderEvolutionDashboard, 120);
+    }
+}
+
+function initExerciseTips() {
+    document.querySelectorAll('li[data-exid]').forEach(li => {
+        const tip = li.querySelector('.dica-execucao');
+        const meta = li.querySelector('.exercicio-meta');
+        if (!tip || !meta || meta.querySelector('.btn-tip-toggle')) return;
+
+        tip.classList.add('collapsed-tip');
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-tip-toggle';
+        btn.textContent = '💡 Dica';
+        btn.setAttribute('aria-expanded', 'false');
+        btn.addEventListener('click', ev => {
+            ev.stopPropagation();
+            toggleExerciseTip(btn);
+        });
+        meta.appendChild(btn);
+    });
+}
+
+function toggleExerciseTip(btn) {
+    const li = btn.closest('li[data-exid]');
+    if (!li) return;
+    const tip = li.querySelector('.dica-execucao');
+    if (!tip) return;
+
+    const collapsed = tip.classList.toggle('collapsed-tip');
+    btn.textContent = collapsed ? '💡 Dica' : '🙈 Ocultar dica';
+    btn.setAttribute('aria-expanded', String(!collapsed));
 }
 
 // ──────────────────────────────────────────
@@ -2583,6 +2725,7 @@ function renderPlateauWarnings() {
 document.addEventListener('DOMContentLoaded', () => {
     applyIOSCompatibility();
     initData();
+    initExerciseTips();
     updateSettingsUI();
     applyQuickModeVisibility();
     renderDashboard();
