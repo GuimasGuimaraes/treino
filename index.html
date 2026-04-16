@@ -66,6 +66,46 @@
         }
         .subtitle { text-align: center; color: var(--text-muted); margin-bottom: 30px; font-weight: 300; font-size: 1.1rem; }
 
+        /* ── Quick nav (fixed shortcuts) ── */
+        .quick-nav {
+            position: sticky;
+            top: calc(8px + env(safe-area-inset-top));
+            z-index: 350;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 0 0 14px;
+            padding: 10px;
+            border-radius: 10px;
+            background: rgba(18,18,18,.9);
+            border: 1px solid #2a2a2a;
+            backdrop-filter: blur(8px);
+        }
+        .quick-nav-btn {
+            background: #252525;
+            border: 1px solid #444;
+            color: var(--text-muted);
+            border-radius: 8px;
+            padding: 7px 12px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            min-height: 36px;
+            transition: all .15s;
+        }
+        .quick-nav-btn:hover { color: #fff; border-color: #666; }
+        .quick-nav-btn.active-shortcut { border-color: var(--accent-secondary); color: var(--accent-secondary); background: rgba(46,213,115,.12); }
+        .quick-nav-btn.focus-on { border-color: var(--accent-warning); color: var(--accent-warning); background: rgba(255,165,2,.12); }
+        .quick-nav-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+        .treino-card.focus-hidden { display: none; }
+        body.focus-mode .extras-section,
+        body.focus-mode .calc-section,
+        body.focus-mode .phase2-section,
+        body.focus-mode .dicas-estrategicas,
+        body.focus-mode h1,
+        body.focus-mode .subtitle { display: none; }
+
         /* ── Extras panel (non-essential while training) ── */
         .extras-section { background: #171717; border: 1px solid #2a2a2a; border-radius: 12px; margin-bottom: 20px; padding: 16px 16px 8px; }
         .extras-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -589,6 +629,13 @@
             .dica-execucao { font-size: 0.82rem; padding: 8px 10px; gap: 8px; }
             .btn-tip-toggle { min-height: 30px; font-size: 0.7rem; }
 
+            .quick-nav {
+                top: calc(4px + env(safe-area-inset-top));
+                gap: 6px;
+                padding: 8px;
+            }
+            .quick-nav-btn { flex: 1; min-width: 58px; padding: 8px 6px; font-size: 0.76rem; }
+
             /* ── Set tracking: o mais crítico no treino ── */
             .log-section { margin-top: 12px; }
             .sets-header { grid-template-columns: 26px 1fr 50px; gap: 5px; font-size: 0.68rem; }
@@ -771,6 +818,15 @@
     </div>
 
         </div>
+    </div>
+
+    <div class="quick-nav" id="quick-nav">
+        <button class="quick-nav-btn" id="quick-A" onclick="jumpToTrain('A')">A</button>
+        <button class="quick-nav-btn" id="quick-B" onclick="jumpToTrain('B')">B</button>
+        <button class="quick-nav-btn" id="quick-C" onclick="jumpToTrain('C')">C</button>
+        <button class="quick-nav-btn" id="quick-active" onclick="jumpToActiveTrain()">Ativo</button>
+        <button class="quick-nav-btn" id="quick-resume" onclick="resumeSavedSession()" style="display:none;">Continuar</button>
+        <button class="quick-nav-btn" id="quick-focus" onclick="toggleFocusMode()">Foco OFF</button>
     </div>
 
     <!-- TREINO A -->
@@ -1072,6 +1128,7 @@
 // ──────────────────────────────────────────
 const STORE_KEY = 'bb_personal_v1';
 const SETTINGS_KEY = 'bb_settings_v1';
+const ACTIVE_SESSION_KEY = 'bb_active_session_v1';
 
 const EX_NAMES = {
     'supino-inclinado': 'Supino Inclinado', 'supino-reto': 'Supino Reto',
@@ -1357,15 +1414,16 @@ function saveData(d) { localStorage.setItem(STORE_KEY, JSON.stringify(d)); }
 
 function getSettings() {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { autoFill: true, quickMode: false };
+    if (!raw) return { autoFill: true, quickMode: false, focusMode: false };
     try {
         const parsed = JSON.parse(raw);
         return {
             autoFill: parsed.autoFill !== false,
-            quickMode: !!parsed.quickMode
+            quickMode: !!parsed.quickMode,
+            focusMode: !!parsed.focusMode
         };
     } catch {
-        return { autoFill: true, quickMode: false };
+        return { autoFill: true, quickMode: false, focusMode: false };
     }
 }
 
@@ -1486,15 +1544,137 @@ let sessionStartTime = null;
 let sessionClockInterval = null;
 let pendingSetEntry = null;
 let pendingEndContext = null;
+let pendingResumeSession = null;
 
-function startTraining(type) {
-    if (activeTrain === type) { requestEndTraining(); return; }
-    if (activeTrain) { requestEndTraining(type); return; }
+function persistActiveSession() {
+    if (!activeTrain) {
+        localStorage.removeItem(ACTIVE_SESSION_KEY);
+        return;
+    }
+
+    const payload = {
+        type: activeTrain,
+        sessionData,
+        sessionNewPRs,
+        sessionDoneSets,
+        sessionStartTime,
+        savedAt: Date.now()
+    };
+    localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(payload));
+    pendingResumeSession = null;
+}
+
+function clearActiveSession() {
+    localStorage.removeItem(ACTIVE_SESSION_KEY);
+    pendingResumeSession = null;
+}
+
+function loadResumeCandidate() {
+    const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
+    if (!raw) return;
+
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || !['A', 'B', 'C'].includes(parsed.type)) {
+            clearActiveSession();
+            return;
+        }
+        pendingResumeSession = parsed;
+    } catch {
+        clearActiveSession();
+    }
+}
+
+function resumeSavedSession() {
+    if (activeTrain || !pendingResumeSession) return;
+
+    startTraining(pendingResumeSession.type, {
+        restoring: true,
+        sessionData: pendingResumeSession.sessionData || {},
+        sessionNewPRs: pendingResumeSession.sessionNewPRs || 0,
+        sessionDoneSets: pendingResumeSession.sessionDoneSets || 0,
+        sessionStartTime: pendingResumeSession.sessionStartTime || Date.now()
+    });
+
+    showToast('Sessão retomada', `Treino ${pendingResumeSession.type} restaurado com sucesso.`, 'end-toast');
+    pendingResumeSession = null;
+    updateQuickNav();
+}
+
+function jumpToTrain(type) {
+    const card = document.getElementById(`card-${type}`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function jumpToActiveTrain() {
+    if (!activeTrain) {
+        showToast('Sem treino ativo', 'Inicie um treino para usar esse atalho.', 'warn-toast');
+        return;
+    }
+    jumpToTrain(activeTrain);
+}
+
+function updateQuickNav() {
+    ['A', 'B', 'C'].forEach(type => {
+        const btn = document.getElementById(`quick-${type}`);
+        if (!btn) return;
+        btn.classList.toggle('active-shortcut', activeTrain === type);
+    });
+
+    const activeBtn = document.getElementById('quick-active');
+    if (activeBtn) {
+        activeBtn.textContent = activeTrain
+            ? `Ativo ${activeTrain} • ${sessionDoneSets} série${sessionDoneSets !== 1 ? 's' : ''}`
+            : 'Ativo';
+        activeBtn.disabled = !activeTrain;
+    }
+
+    const resumeBtn = document.getElementById('quick-resume');
+    if (resumeBtn) {
+        const showResume = !activeTrain && !!pendingResumeSession;
+        resumeBtn.style.display = showResume ? '' : 'none';
+    }
+
+    const focusBtn = document.getElementById('quick-focus');
+    if (focusBtn) {
+        const focusMode = getSettings().focusMode;
+        focusBtn.textContent = focusMode ? 'Foco ON' : 'Foco OFF';
+        focusBtn.classList.toggle('focus-on', focusMode);
+    }
+}
+
+function applyFocusMode() {
+    const focusMode = getSettings().focusMode;
+    document.body.classList.toggle('focus-mode', focusMode);
+
+    ['A', 'B', 'C'].forEach(type => {
+        const card = document.getElementById(`card-${type}`);
+        if (!card) return;
+        const shouldHide = focusMode && activeTrain && activeTrain !== type;
+        card.classList.toggle('focus-hidden', shouldHide);
+    });
+
+    updateQuickNav();
+}
+
+function toggleFocusMode() {
+    const settings = setSettingsPatch({ focusMode: !getSettings().focusMode });
+    applyFocusMode();
+    showToast('Modo foco', settings.focusMode ? 'Ativado: foco total no treino.' : 'Desativado: visão completa restaurada.', 'end-toast');
+}
+
+function startTraining(type, options = {}) {
+    const restoring = !!options.restoring;
+    if (!restoring) {
+        if (activeTrain === type) { requestEndTraining(); return; }
+        if (activeTrain) { requestEndTraining(type); return; }
+    }
 
     activeTrain = type;
-    sessionData = {};
-    sessionNewPRs = 0;
-    sessionDoneSets = 0;
+    sessionData = restoring ? (options.sessionData || {}) : {};
+    sessionNewPRs = restoring ? (options.sessionNewPRs || 0) : 0;
+    sessionDoneSets = restoring ? (options.sessionDoneSets || 0) : 0;
 
     const btn = document.getElementById(`btn-${type}`);
     btn.textContent = `⏹ Encerrar Treino ${type}`;
@@ -1502,6 +1682,8 @@ function startTraining(type) {
 
     // Inject set rows into all exercises of this card
     const card = document.getElementById(`card-${type}`);
+    card.classList.remove('collapsed');
+    saveCollapseState(type, false);
     card.querySelectorAll('li[data-exid]').forEach(li => {
         const exId  = li.dataset.exid;
         const sets  = parseInt(li.dataset.sets);
@@ -1515,7 +1697,7 @@ function startTraining(type) {
     updateSessionBar();
 
     // Start elapsed clock
-    sessionStartTime = Date.now();
+    sessionStartTime = restoring ? (options.sessionStartTime || Date.now()) : Date.now();
     if (sessionClockInterval) clearInterval(sessionClockInterval);
     sessionClockInterval = setInterval(() => {
         const secs = Math.floor((Date.now() - sessionStartTime) / 1000);
@@ -1528,7 +1710,11 @@ function startTraining(type) {
         }
     }, 1000);
 
-    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    persistActiveSession();
+    applyFocusMode();
+    updateQuickNav();
+
+    if (!restoring) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function requestEndTraining(nextTrainType = null) {
@@ -1593,8 +1779,11 @@ function endTraining() {
     sessionData = {};
     if (sessionClockInterval) { clearInterval(sessionClockInterval); sessionClockInterval = null; }
     sessionStartTime = null;
+    clearActiveSession();
     const barTime = document.getElementById('bar-time');
     if (barTime) { barTime.textContent = '0:00'; barTime.className = 'bar-time'; }
+    applyFocusMode();
+    updateQuickNav();
     renderDashboard();
     renderEvolutionDashboard();
     setTimeout(renderPlateauWarnings, 400);
@@ -1627,14 +1816,20 @@ function injectSetRows(li, exId, sets, rest) {
     // Build set rows
     let setsHtml = `<div class="sets-header"><span></span><span>kg</span><span></span></div>`;
     for (let i = 0; i < sets; i++) {
+        const existingSet = sessionData[exId] && sessionData[exId][i] ? sessionData[exId][i] : null;
         const lastW = lastSession && lastSession.exercises[exId] && lastSession.exercises[exId][i] ? lastSession.exercises[exId][i].weight : '';
         const lastR = lastSession && lastSession.exercises[exId] && lastSession.exercises[exId][i] ? lastSession.exercises[exId][i].reps   : '';
-        const valueW = settings.autoFill && lastW ? `value="${lastW}"` : '';
+        const restoredW = existingSet && existingSet.weight ? existingSet.weight : '';
+        const restoredR = existingSet && existingSet.reps ? existingSet.reps : '';
+        const isDone = !!(existingSet && existingSet.done);
+        const valueW = restoredW !== ''
+            ? `value="${restoredW}"`
+            : (settings.autoFill && lastW ? `value="${lastW}"` : '');
         setsHtml += `
-            <div class="set-row" id="row-${exId}-${i}" data-last-reps="${lastR || ''}" data-last-weight="${lastW || ''}">
+            <div class="set-row${isDone ? ' done' : ''}" id="row-${exId}-${i}" data-last-reps="${restoredR || lastR || ''}" data-last-weight="${restoredW || lastW || ''}">
                 <span class="set-num">${i + 1}</span>
                 <input class="set-input" type="number" id="w-${exId}-${i}" placeholder="${lastW || '—'}" ${valueW} step="0.5" min="0" inputmode="decimal">
-                <button class="set-check" onclick="completeSet('${exId}', ${i}, ${rest})">○</button>
+                <button class="set-check" onclick="completeSet('${exId}', ${i}, ${rest})">${isDone ? '✓' : '○'}</button>
             </div>`;
     }
 
@@ -1659,9 +1854,15 @@ function injectSetRows(li, exId, sets, rest) {
     li.appendChild(logDiv);
 
     // Init session data
-    if (!sessionData[exId]) {
-        sessionData[exId] = Array.from({ length: sets }, () => ({ weight: null, reps: null, done: false }));
-    }
+    const existing = Array.isArray(sessionData[exId]) ? sessionData[exId] : [];
+    sessionData[exId] = Array.from({ length: sets }, (_, idx) => {
+        const cur = existing[idx] || {};
+        return {
+            weight: cur.weight ?? null,
+            reps: cur.reps ?? null,
+            done: !!cur.done
+        };
+    });
 }
 
 function completeSet(exId, idx, rest) {
@@ -1745,6 +1946,7 @@ function clearSetEntryModal() {
 
     sessionDoneSets = Math.max(0, sessionDoneSets - 1);
     updateSessionBar();
+    persistActiveSession();
 
     const liveEl = document.getElementById(`pr-live-${exId}`);
     if (liveEl) liveEl.textContent = '';
@@ -1792,6 +1994,7 @@ function submitSetEntryModal() {
 
     if (!wasDone) sessionDoneSets++;
     updateSessionBar();
+    persistActiveSession();
 
     // Haptic feedback (Android/mobile)
     if (navigator.vibrate) navigator.vibrate(isPR ? [50, 30, 50, 30, 120] : 50);
@@ -1828,6 +2031,7 @@ function updateSessionBar() {
     const prEl = document.getElementById('bar-prs');
     prEl.textContent = sessionNewPRs > 0 ? `• ${sessionNewPRs} PR${sessionNewPRs > 1 ? 's' : ''}` : '';
     prEl.style.color = 'var(--accent-warning)';
+    updateQuickNav();
 }
 
 // ──────────────────────────────────────────
@@ -2732,6 +2936,9 @@ document.addEventListener('DOMContentLoaded', () => {
     renderEvolutionDashboard();
     renderPhase2Content('A');
     loadCollapseState();
+    applyFocusMode();
+    loadResumeCandidate();
+    updateQuickNav();
     renderPlateauWarnings();
 
     const importInput = document.getElementById('import-file');
